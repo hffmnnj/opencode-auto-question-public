@@ -1,0 +1,16 @@
+{
+  "name": "opencode-auto-question",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./dist/index.js" },
+  "files": ["index.ts", "dist", "README.md"],
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "build": "bun build ./src/index.ts --outdir ./dist --target bun --external '@opencode/*'",
+    "check": "bun run typecheck && bun test && bun run build"
+  },
+  "dependencies": { "@opencode/plugin": "2.0.32", "@opencode/client": "2.0.32" },
+  "devDependencies": { "@types/bun": "1.3.5", "typescript": "5.9.3" }
+}
