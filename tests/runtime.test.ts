@@ -151,9 +151,10 @@ class FakeForms {
 
 function createSessions(directories: Map<string, string>, failures = new Set<string>()) {
   return {
-    directoryOf: async (sessionID: string) => {
+    locationOf: async (sessionID: string) => {
       if (failures.has(sessionID)) throw new Error("session gone");
-      return directories.get(sessionID);
+      const directory = directories.get(sessionID);
+      return directory === undefined ? undefined : { directory, workspaceID: WORKSPACE };
     },
   };
 }
@@ -538,6 +539,36 @@ describe("pending-state recheck", () => {
 });
 
 describe("reload recovery", () => {
+  test("foreign location recovery neither answers nor removes the owner's deadline", async () => {
+    const storage = new FakeStorage();
+    const owner = createHarness(storage);
+    const first = startAutoQuestion(owner.deps());
+    await first.handleEvent(createdEvent());
+    first.dispose();
+
+    for (const scope of [
+      { directory: "/another-project", workspaceID: WORKSPACE },
+      { directory: DIRECTORY, workspaceID: "another-workspace" },
+    ]) {
+      const foreign = createHarness(storage);
+      const foreignRuntime = startAutoQuestion(foreign.deps(scope));
+      await foreignRuntime.recover();
+      await foreign.scheduler.advance(750_000);
+      expect(foreign.forms.getCalls).toBe(0);
+      expect(foreign.forms.replies).toEqual([]);
+      expect(storage.keys()).toHaveLength(1);
+      foreignRuntime.dispose();
+    }
+
+    const resumed = createHarness(storage);
+    const resumedRuntime = startAutoQuestion(resumed.deps());
+    await resumedRuntime.recover();
+    await resumed.scheduler.advance(750_000);
+    expect(resumed.forms.replies).toEqual([{ sessionID: "s1", formID: "f1", answer: { q0: AUTO_ANSWER_TEXT } }]);
+    expect(storage.keys()).toEqual([]);
+    resumedRuntime.dispose();
+  });
+
   test("a reload keeps the original deadline", async () => {
     const storage = new FakeStorage();
     const first = createHarness(storage);

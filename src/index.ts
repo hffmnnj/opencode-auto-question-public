@@ -45,10 +45,10 @@ export default Plugin.define({
         reply: (sessionID, formID, answer) => client.session.form.reply({ sessionID, formID, answer }, requestOptions()),
       },
       sessions: {
-        directoryOf: async (sessionID) => {
+        locationOf: async (sessionID) => {
           try {
             const info = await ctx.session.get({ sessionID });
-            return info.location.directory;
+            return info.location;
           } catch {
             return undefined;
           }

@@ -36,6 +36,10 @@ Automatically answers unanswered OpenCode V2 Question tool forms after
 - Failures attempt once: a failed read or reply cleans up tracking without
   retries. Disposal aborts the event stream, cancels timers, keeps stored
   deadlines, and blocks an in-flight read from submitting afterwards.
+- An event-stream failure stops tracking new questions until plugin reload;
+  existing timers continue. A manual answer that reaches the server before the
+  timeout reply is never overwritten; concurrent submissions use the server's
+  first-successful-settlement rule.
 
 ## Installation
 

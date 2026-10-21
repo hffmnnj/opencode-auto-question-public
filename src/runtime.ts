@@ -35,7 +35,7 @@ export interface FormsPort {
 }
 
 export interface SessionsPort {
-  directoryOf(sessionID: string): Promise<string | undefined>;
+  locationOf(sessionID: string): Promise<{ readonly directory: string; readonly workspaceID?: string } | undefined>;
 }
 
 export interface AutoQuestionDeps {
@@ -238,7 +238,8 @@ export function startAutoQuestion(deps: AutoQuestionDeps): AutoQuestionRuntime {
   ): Promise<boolean> {
     if (location !== undefined) return locationMatches(location);
     try {
-      return (await deps.sessions.directoryOf(sessionID)) === deps.directory;
+      const current = await deps.sessions.locationOf(sessionID);
+      return current !== undefined && locationMatches({ directory: current.directory, workspaceID: current.workspaceID });
     } catch {
       return false;
     }
@@ -277,6 +278,9 @@ export function startAutoQuestion(deps: AutoQuestionDeps): AutoQuestionRuntime {
     tracked.delete(key);
     if (disposed) return;
     try {
+      // Plugin storage is shared between locations. Leave another location's
+      // deadline intact so its own instance can recover and answer it.
+      if (!(await inScope(undefined, sessionID)) || disposed) return;
       const detail = await deps.forms.get(sessionID, formID);
       if (disposed) return;
       const form = readFormDetail(detail);
