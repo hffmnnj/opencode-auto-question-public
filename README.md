@@ -43,28 +43,35 @@ Automatically answers unanswered OpenCode V2 Question tool forms after
 
 ## Installation
 
-Run `bun install --frozen-lockfile && bun run check`, then add
-`"file:///path/to/opencode-auto-question"` to the `plugins` array
-in `~/.config/opencode-v2/opencode.json`. Watched configuration reloads
-without restarting services. There are no configuration options in v1.
+Run `bun install --frozen-lockfile` and `bun run check` in the checkout, then
+add its absolute directory path or file URL to the `plugins` array in your
+OpenCode configuration. Use your own checkout path on Windows, macOS, or Linux.
+Watched configuration reloads without restarting services. There are no
+configuration options in v1.
 
 ## Layout
 
 - `src/index.ts` — `Plugin.define` wiring (`id: opencode-auto-question`).
+- `src/local-client.ts`, `src/discovery-worker.ts`, `src/local-fetch.ts` —
+  authenticated managed-service discovery and guarded local requests.
 - `src/runtime.ts` — location filtering, Question detection, deadline
   scheduling, durable recovery, pending recheck, and disposal. Exports
   `AUTO_ANSWER_DELAY_MS`, `AUTO_ANSWER_TEXT`, and `startAutoQuestion` with
   injected clock/scheduler/storage/event/form/session ports.
 - `tests/runtime.test.ts` — deterministic behavioral tests over fakes
-  (no sleeps, no live server).
+  (no sleeps, no live server); `tests/local-client.test.ts` uses a local fake
+  service and a temporary registration.
 
 ## Server compatibility
 
-Tested against OpenCode 2.0.32. Its plugin context does not expose form replies,
-so the plugin uses the official `@opencode/client` against the existing main
-server at `http://127.0.0.1:4108`. It uses the server's existing
-`OPENCODE_SERVER_USERNAME` and `OPENCODE_SERVER_PASSWORD` environment variables,
-never starts a host, refuses redirects, and verifies that the endpoint belongs
-to the plugin's own process before tracking any questions. Missing credentials
-or a different server cause plugin activation to fail rather than answer forms
-elsewhere. This v1 is specific to that installation's main-server address.
+Targets OpenCode 2.0.32. Its plugin context does not expose form replies, so
+the plugin uses `Service.discover()` and `Service.headers()` from the official
+client to connect to the existing registered managed service, including its
+dynamic port and credentials. It never starts or stops a host. Discovery runs
+in an isolated worker because the SDK's probe uses global fetch; both that
+probe and later requests permit only numeric loopback addresses and refuse
+redirects. The plugin verifies the service PID and exact OpenCode version before
+tracking any questions. Missing registration, authentication, an unhealthy or
+different server, or unsupported explicit/standalone servers fail activation
+instead of answering forms elsewhere. Reload the plugin after correcting a
+transient discovery failure. This change has not been tested with a live host.
