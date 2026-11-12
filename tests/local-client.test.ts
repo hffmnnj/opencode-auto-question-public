@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, rmdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
@@ -27,7 +27,13 @@ const server = Bun.serve({
 });
 afterAll(async () => {
   server.stop(true);
-  await rm(dir, { recursive: true, force: true });
+  await rm(file, { force: true });
+  await rm(join(dir, "state", "opencode", "service.json"), { force: true });
+  for (const directory of [join(dir, "state", "opencode"), join(dir, "state"), dir]) {
+    await rmdir(directory).catch((error: NodeJS.ErrnoException) => {
+      if (error.code !== "ENOENT") throw error;
+    });
+  }
 });
 
 async function register(url = `http://127.0.0.1:${server.port}`, registrationPid = process.pid) {
@@ -115,13 +121,32 @@ describe("managed service discovery", () => {
     try {
       const path = pathToFileURL(join(import.meta.dir, "../dist/index.js")).href;
       const plugin = (await import(path)).default;
+      const namespaces: string[] = [];
+      const tools: Array<{ name: string; options: { namespace: string; codemode: boolean } }> = [];
+      const hooks: string[] = [];
+      requests.length = 0;
       const cleanup = await plugin.setup({
         app: { version }, location: { directory: "/test" },
         storage: { scan: async () => ({ entries: [] }) },
         event: { subscribe: async function* () {} },
-        session: { get: async () => undefined },
+        session: { get: async () => undefined, hook: async (name: string) => { hooks.push(name); } },
+        tool: { transform: async (edit: (editor: {
+          namespace: (value: { name: string }) => void;
+          add: (value: { name: string; options: { namespace: string; codemode: boolean } }) => void;
+        }) => void) => edit({
+          namespace: ({ name }) => { namespaces.push(name); },
+          add: (tool) => { tools.push(tool); },
+        }) },
       });
       expect(typeof cleanup).toBe("function");
+      expect(namespaces).toEqual(["agent_question"]);
+      expect(tools.map(({ name, options }) => ({ name, options }))).toEqual([
+        { name: "list", options: { namespace: "agent_question", codemode: true } },
+        { name: "reply", options: { namespace: "agent_question", codemode: true } },
+      ]);
+      expect(hooks).toEqual(["context"]);
+      expect(requests.length).toBeGreaterThanOrEqual(2);
+      expect(requests.every((request) => request.path === "/api/info" && request.authorization === authorization)).toBe(true);
       cleanup();
     } finally {
       if (previous === undefined) delete process.env.XDG_STATE_HOME;
