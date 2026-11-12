@@ -69,8 +69,22 @@ plugin are listed; inaccessible or changed forms are skipped.
 Run `bun install --frozen-lockfile` and `bun run check` in the checkout, then
 add its absolute directory path or file URL to the `plugins` array in your
 OpenCode configuration. Use your own checkout path on Windows, macOS, or Linux.
-Watched configuration reloads without restarting services. There are no
-configuration options in v1.
+Watched configuration reloads without restarting services. Registered managed
+service discovery is the default. For the local OpenCode V2 host at exactly
+`http://127.0.0.1:4108` that does not have a service registration, explicitly
+opt in using the object form of the plugin entry:
+
+```json
+{
+  "package": "file:///absolute/path/to/opencode-auto-question",
+  "options": { "useCurrentServer": true }
+}
+```
+
+The host process must have both `OPENCODE_SERVER_USERNAME` and
+`OPENCODE_SERVER_PASSWORD` set. Do not put credentials in plugin configuration.
+No other URL or port is configurable by this option. Set `useCurrentServer` to
+`false` or omit it to use registered-service discovery instead.
 
 ## Layout
 
@@ -95,6 +109,9 @@ in an isolated worker because the SDK's probe uses global fetch; both that
 probe and later requests permit only numeric loopback addresses and refuse
 redirects. The plugin verifies the service PID and exact OpenCode version before
 tracking any questions. Missing registration, authentication, an unhealthy or
-different server, or unsupported explicit/standalone servers fail activation
-instead of answering forms elsewhere. Reload the plugin after correcting a
-transient discovery failure. This change has not been tested with a live host.
+different server fail activation instead of answering forms elsewhere. The
+explicit current-server option uses only the fixed loopback endpoint, sends
+environment credentials in the Basic authorization header, refuses redirects,
+and enforces the same PID and exact-version check. It is intended only when the
+plugin runs in the API server process; do not use it with a separate process or
+another listener. Reload the plugin after correcting a transient failure.

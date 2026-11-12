@@ -25,6 +25,129 @@ const server = Bun.serve({
     return Response.json({ pid, version });
   },
 });
+
+describe("explicit current server", () => {
+  const env = { OPENCODE_SERVER_USERNAME: "opencode", OPENCODE_SERVER_PASSWORD: password };
+  const target = "http://127.0.0.1:4108";
+  // Route the pinned address to a disposable service; never connect to the live host.
+  const transport = Object.assign((input: RequestInfo | URL, init?: RequestInit) => {
+    const request = new Request(input, init);
+    const url = new URL(request.url);
+    expect(url.origin).toBe(target);
+    url.port = String(server.port);
+    return fetch(new Request(url, request));
+  }, { preconnect: fetch.preconnect });
+  const options = { useCurrentServer: true, env, transport };
+
+  test("authenticates the fixed endpoint and returns a client only after identity verification", async () => {
+    requests.length = 0;
+    const client = await createLocalClient(version, process.pid, AbortSignal.timeout(5_000), options);
+    expect(requests).toEqual([{ path: "/api/info", authorization }]);
+    expect((await client.server.info()).pid).toBe(process.pid);
+    expect(requests).toEqual([
+      { path: "/api/info", authorization },
+      { path: "/api/info", authorization },
+    ]);
+  });
+
+  test("refuses absent credentials and colon-containing usernames before any request", async () => {
+    requests.length = 0;
+    for (const credentials of [
+      {},
+      { OPENCODE_SERVER_USERNAME: "opencode" },
+      { OPENCODE_SERVER_PASSWORD: password },
+      { OPENCODE_SERVER_USERNAME: "bad:name", OPENCODE_SERVER_PASSWORD: password },
+    ]) {
+      await expect(createLocalClient(version, process.pid, AbortSignal.timeout(5_000), { ...options, env: credentials }))
+        .rejects.toThrow("authentication is required");
+    }
+    expect(requests).toEqual([]);
+  });
+
+  test("rejects a different server process or exact version before returning a client", async () => {
+    requests.length = 0;
+    await expect(createLocalClient(version, process.pid + 1, AbortSignal.timeout(5_000), options))
+      .rejects.toThrow("refuses to answer forms on another OpenCode server");
+    await expect(createLocalClient("2.0.33", process.pid, AbortSignal.timeout(5_000), options))
+      .rejects.toThrow("refuses to answer forms on another OpenCode server");
+    expect(requests).toEqual([
+      { path: "/api/info", authorization },
+      { path: "/api/info", authorization },
+    ]);
+  });
+
+  test("does not follow a redirect during identity verification", async () => {
+    requests.length = 0;
+    redirect = true;
+    try {
+      await expect(createLocalClient(version, process.pid, AbortSignal.timeout(5_000), options)).rejects.toThrow();
+      expect(requests).toEqual([{ path: "/api/info", authorization }]);
+    } finally {
+      redirect = false;
+    }
+  });
+
+  test("aborts identity verification when cancelled", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    requests.length = 0;
+    await expect(createLocalClient(version, process.pid, controller.signal, options)).rejects.toThrow();
+    expect(requests).toEqual([]);
+  });
+
+  test("pins every request to the fixed origin and refuses URL credentials and redirects", async () => {
+    const calls: Array<{ url: string; redirect: RequestRedirect | undefined }> = [];
+    const capture = Object.assign(async (input: RequestInfo | URL, init?: RequestInit) => {
+      calls.push({ url: input.toString(), redirect: init?.redirect });
+      return new Response();
+    }, { preconnect: fetch.preconnect });
+    const safe = makeLocalFetch(capture, target);
+    await safe(`${target}/api/info`, { redirect: "follow" });
+    for (const url of [
+      "http://127.0.0.1:4109/api/info", "http://localhost:4108/api/info", "http://127.0.0.2:4108/api/info",
+      "http://127.1:4108/api/info", "http://127.0.0.1:04108/api/info",
+      "https://127.0.0.1:4108/api/info", "http://user:pass@127.0.0.1:4108/api/info",
+      "http://example.com:4108/api/info", "http://127.0.0.1:4108.example.com/api/info",
+    ]) expect(() => safe(url)).toThrow();
+    expect(calls).toEqual([{ url: `${target}/api/info`, redirect: "error" }]);
+  });
+
+  test("built plugin honors the opt-in and rejects a URL in place of the boolean", async () => {
+    const script = `
+      import plugin from ${JSON.stringify(pathToFileURL(join(import.meta.dir, "../dist/index.js")).href)};
+      const seen = [];
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = Object.assign(async (input, init) => {
+        const request = new Request(input, init);
+        seen.push({ url: request.url, authorization: request.headers.get("authorization"), redirect: init?.redirect });
+        return Response.json({ pid: process.pid, version: "2.2.1" });
+      }, { preconnect: originalFetch.preconnect });
+      const ctx = {
+        app: { version: "2.2.1" }, options: { useCurrentServer: true }, location: { directory: "/test" },
+        storage: { scan: async () => ({ entries: [] }) },
+        event: { subscribe: async function* () {} },
+        session: { get: async () => undefined, hook: async () => {} },
+        tool: { transform: async (edit) => edit({ namespace: () => {}, add: () => {} }) },
+      };
+      const cleanup = await plugin.setup(ctx);
+      cleanup();
+      let invalidRejected = false;
+      try { await plugin.setup({ ...ctx, options: { useCurrentServer: "http://other.example" } }); }
+      catch (error) { invalidRejected = error.message === "useCurrentServer must be a boolean."; }
+      console.log(JSON.stringify({ seen, invalidRejected }));
+    `;
+    const child = Bun.spawn([process.execPath, "--eval", script], {
+      env: { OPENCODE_SERVER_USERNAME: "opencode", OPENCODE_SERVER_PASSWORD: password },
+      stdout: "pipe", stderr: "pipe",
+    });
+    const [stdout, stderr, exit] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]);
+    expect({ exit, stderr }).toEqual({ exit: 0, stderr: "" });
+    expect(JSON.parse(stdout)).toEqual({
+      seen: [{ url: `${target}/api/info`, authorization, redirect: "error" }],
+      invalidRejected: true,
+    });
+  });
+});
 afterAll(async () => {
   server.stop(true);
   await rm(file, { force: true });
@@ -45,7 +168,7 @@ describe("managed service discovery", () => {
     await register();
     const original = globalThis.fetch;
     requests.length = 0;
-    const client = await createLocalClient("2.0.32", process.pid, AbortSignal.timeout(5_000), file);
+    const client = await createLocalClient("2.0.32", process.pid, AbortSignal.timeout(5_000), { file });
     expect(globalThis.fetch).toBe(original);
     expect((await client.server.info()).pid).toBe(process.pid);
     expect(requests.length).toBeGreaterThanOrEqual(3);
@@ -61,7 +184,7 @@ describe("managed service discovery", () => {
   test("rejects mismatched version and a different hosting process", async () => {
     await register();
     await expect(discoverLocalService("2.0.33", file)).rejects.toThrow();
-    await expect(createLocalClient("2.0.32", process.pid + 1, AbortSignal.timeout(5_000), file)).rejects.toThrow();
+    await expect(createLocalClient("2.0.32", process.pid + 1, AbortSignal.timeout(5_000), { file })).rejects.toThrow();
     pid = process.pid + 1;
     try {
       await expect(discoverLocalService("2.0.32", file)).rejects.toThrow();
@@ -94,12 +217,12 @@ describe("managed service discovery", () => {
     await writeFile(file, JSON.stringify({ url: `http://127.0.0.1:${server.port}`, pid: process.pid, version }));
     requireAuth = false;
     try {
-      await expect(createLocalClient(version, process.pid, AbortSignal.timeout(5_000), file)).rejects.toThrow("authentication is required");
+      await expect(createLocalClient(version, process.pid, AbortSignal.timeout(5_000), { file })).rejects.toThrow("authentication is required");
     } finally {
       requireAuth = true;
     }
     await register();
-    const client = await createLocalClient(version, process.pid, AbortSignal.timeout(5_000), file);
+    const client = await createLocalClient(version, process.pid, AbortSignal.timeout(5_000), { file });
     requests.length = 0;
     redirect = true;
     try {

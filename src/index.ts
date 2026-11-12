@@ -8,11 +8,15 @@ import { registerQuestionAdvisory } from "./advisory.ts";
 export default Plugin.define({
   id: "opencode-auto-question",
   async setup(ctx) {
+    const useCurrentServer: unknown = ctx.options?.useCurrentServer;
+    if (useCurrentServer !== undefined && typeof useCurrentServer !== "boolean") {
+      throw new Error("useCurrentServer must be a boolean.");
+    }
     const controller = new AbortController();
     const requestOptions = (signal?: AbortSignal) => ({
       signal: AbortSignal.any([controller.signal, AbortSignal.timeout(5_000), ...(signal ? [signal] : [])]),
     });
-    const client = await createLocalClient(ctx.app.version, process.pid, requestOptions().signal);
+    const client = await createLocalClient(ctx.app.version, process.pid, requestOptions().signal, { useCurrentServer });
     const forms = {
       get: (sessionID: string, formID: string, signal?: AbortSignal) => client.session.form.get({ sessionID, formID }, requestOptions(signal)),
       reply: (sessionID: string, formID: string, answer: Record<string, string | ReadonlyArray<string>>) =>
