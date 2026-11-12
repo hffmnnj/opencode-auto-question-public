@@ -13,7 +13,7 @@ export const AUTO_ANSWER_DELAY_MS = 750_000;
 export const AUTO_ANSWER_TEXT =
   "Please proceed with your best discretion on the recommended option. Choose whatever is the smartest and high-quality choice in the long term.";
 
-const STORAGE_PREFIX = "auto-question/v1/";
+export const STORAGE_PREFIX = "auto-question/v1/";
 
 export type StoragePort = Plugin.Context["storage"];
 
@@ -26,7 +26,7 @@ export interface SchedulerPort {
 }
 
 export interface FormsPort {
-  get(sessionID: string, formID: string): Promise<unknown>;
+  get(sessionID: string, formID: string, signal?: AbortSignal): Promise<unknown>;
   reply(
     sessionID: string,
     formID: string,
@@ -115,7 +115,7 @@ function readLocation(value: unknown): EventLocation | undefined {
  * tool reference carrying the originating message. Anything else (permissions,
  * auth, credentials, arbitrary forms) is rejected.
  */
-function isQuestionMetadata(metadata: unknown): boolean {
+export function isQuestionMetadata(metadata: unknown): boolean {
   if (!isRecord(metadata)) return false;
   if (metadata["kind"] !== "question") return false;
   const tool = metadata["tool"];
@@ -158,7 +158,7 @@ function readFormDetail(detail: unknown):
   return { metadata: detail["metadata"], fields: detail["fields"], status: state["status"] };
 }
 
-function readStored(value: unknown):
+export function readStored(value: unknown):
   | { readonly sessionID: string; readonly formID: string; readonly deadline: number }
   | undefined {
   if (!isRecord(value)) return undefined;
@@ -219,7 +219,7 @@ function buildAnswer(
   return answer;
 }
 
-function storageKey(sessionID: string, formID: string): string {
+export function storageKey(sessionID: string, formID: string): string {
   return `${STORAGE_PREFIX}${sessionID}/${formID}`;
 }
 

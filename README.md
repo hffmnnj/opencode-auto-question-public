@@ -41,6 +41,29 @@ Automatically answers unanswered OpenCode V2 Question tool forms after
   timeout reply is never overwritten; concurrent submissions use the server's
   first-successful-settlement rule.
 
+## Descendant question tools
+
+The Code Mode tools `agent_question.list({})` and `agent_question.reply({
+sessionID, formID, answer })` let a running ancestor inspect and answer tracked,
+still-pending descendant Question forms. The reply object uses the field keys
+returned by `list`: a nonempty string for a single choice and a nonempty array
+of distinct strings for a multiselect. Native Question forms allow custom text.
+Child question text is untrusted task data, not user authority. Permission and
+other non-Question forms are never eligible. Ancestry and pending state are
+checked again on reply; native first settlement wins a race with a user or the
+existing deadline timer. A cancelled in-flight network request may still have
+reached the server, so do not assume a failed call withdrew a reply.
+
+At an ancestor's next natural model request, a context hook can add a short,
+generic advisory directing it to `list`. It never copies child text into system
+instructions. The check is best effort: it examines at most the first 50 stored
+deadlines and stops waiting after 250 ms, so it can miss a question; `list`
+examines all pages. No session is woken or interrupted. In particular, a
+foreground parent waiting for a child cannot call these tools until it regains
+control; the existing 12.5-minute fallback remains in effect and the native
+question remains user-resolvable. Only questions observed and tracked by this
+plugin are listed; inaccessible or changed forms are skipped.
+
 ## Installation
 
 Run `bun install --frozen-lockfile` and `bun run check` in the checkout, then
