@@ -4,6 +4,15 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { makeLocalFetch } from "./local-fetch.ts";
 
+const CURRENT_SERVER = "http://127.0.0.1:4108";
+
+type ClientOptions = {
+  file?: string;
+  useCurrentServer?: boolean;
+  transport?: typeof fetch;
+  env?: Readonly<Record<string, string | undefined>>;
+};
+
 export async function discoverLocalService(version: string, file?: string): Promise<Endpoint> {
   // The SDK's discovery probe uses global fetch. Isolate that override in a
   // worker so it cannot affect the host or other plugins' network requests.
@@ -32,8 +41,11 @@ export async function discoverLocalService(version: string, file?: string): Prom
   }
 }
 
-export async function createLocalClient(version: string, pid: number, signal: AbortSignal, file?: string) {
-  const endpoint = await discoverLocalService(version, file);
+export async function createLocalClient(version: string, pid: number, signal: AbortSignal, options: ClientOptions = {}) {
+  const env = options.env ?? process.env;
+  const endpoint: Endpoint = options.useCurrentServer
+    ? { url: CURRENT_SERVER, auth: { type: "basic", username: env.OPENCODE_SERVER_USERNAME ?? "", password: env.OPENCODE_SERVER_PASSWORD ?? "" } }
+    : await discoverLocalService(version, options.file);
   if (!endpoint.auth || !endpoint.auth.password || !endpoint.auth.username || endpoint.auth.username.includes(":")) {
     throw new Error("OpenCode service authentication is required.");
   }
@@ -43,7 +55,7 @@ export async function createLocalClient(version: string, pid: number, signal: Ab
   const client = OpenCode.make({
     baseUrl: endpoint.url,
     headers: Service.headers(endpoint),
-    fetch: makeLocalFetch(fetch),
+    fetch: makeLocalFetch(options.transport ?? fetch, options.useCurrentServer ? CURRENT_SERVER : undefined),
   });
   const server = await client.server.info({ signal });
   if (server.pid !== pid || server.version !== version) {
