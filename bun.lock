@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "opencode-auto-question",
+      "name": "hffmnnj.auto-question",
       "dependencies": {
         "@opencode/client": "2.0.32",
         "@opencode/plugin": "2.0.32",

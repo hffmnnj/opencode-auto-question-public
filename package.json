@@ -1,14 +1,16 @@
 {
-  "name": "opencode-auto-question",
+  "name": "hffmnnj.auto-question",
   "version": "1.0.0",
-  "private": true,
   "type": "module",
+  "repository": { "type": "git", "url": "git+https://github.com/hffmnnj/opencode-auto-question.git" },
+  "publishConfig": { "access": "public" },
   "exports": { ".": "./dist/index.js" },
-  "files": ["index.ts", "dist", "README.md"],
+  "files": ["index.ts", "dist", "README.md", "assets/banner.png"],
   "scripts": {
     "test": "bun run build && bun test",
     "typecheck": "tsc --noEmit",
     "build": "bun build ./src/index.ts ./src/discovery-worker.ts --outdir ./dist --target bun --external '@opencode/*'",
+    "prepack": "bun run build",
     "check": "bun run typecheck && bun run test"
   },
   "dependencies": { "@opencode/plugin": "2.0.32", "@opencode/client": "2.0.32" },
