@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/banner.png" alt="Auto Question: a wooden clock with two dials and a question-mark token on a deep red background" width="100%">
+  <img src="https://unpkg.com/hffmnnj.auto-question@1.0.0/assets/banner.png" alt="Auto Question: a wooden clock with two dials and a question-mark token on a deep red background" width="100%">
 </p>
 
 # opencode-auto-question
@@ -77,27 +77,21 @@ inaccessible or changed forms are skipped.
 
 ## Install
 
-The plugin is installed from a local checkout. It is not published on npm, and
-the runtime ID remains `opencode-auto-question`.
-
-Run these in the checkout:
-
-```sh
-bun install --frozen-lockfile
-bun run check
-```
-
-Add the checkout's absolute directory path or file URL to `plugins` in your
-OpenCode configuration, preserving existing entries. Use your own checkout path
-on Windows, macOS, or Linux:
+Add the package to `plugins` in your OpenCode configuration, preserving existing entries:
 
 ```json
 {
   "plugins": [
-    { "package": "file:///absolute/path/to/opencode-auto-question" }
+    { "package": "hffmnnj.auto-question" }
   ]
 }
 ```
+
+If you previously used the local checkout entry, replace it with this one; do
+not keep both entries. Both register the runtime ID
+`opencode-auto-question` and would race on the same stored deadlines. The
+runtime ID is deliberately unchanged so pending deadlines persisted by earlier
+versions remain addressable.
 
 OpenCode watches configuration, so the plugin reloads without restarting
 services.
@@ -108,7 +102,7 @@ explicitly with the object form of the plugin entry:
 
 ```json
 {
-  "package": "file:///absolute/path/to/opencode-auto-question",
+  "package": "hffmnnj.auto-question",
   "options": { "useCurrentServer": true }
 }
 ```
@@ -139,6 +133,17 @@ runs in the API server process, not with a separate process or another listener.
 Reload the plugin after correcting a transient failure.
 
 ## Development
+
+Run these in the checkout:
+
+```sh
+bun install --frozen-lockfile
+bun run check
+```
+
+`bun run check` typechecks, builds `dist/`, and runs the tests. Packing also
+builds the package, which ships both
+`dist/index.js` and `dist/discovery-worker.js`.
 
 `src/index.ts` contains the `Plugin.define` wiring for the runtime ID
 `opencode-auto-question`. `src/runtime.ts` handles location filtering, Question
