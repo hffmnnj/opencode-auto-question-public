@@ -65,15 +65,16 @@ checked again on reply, and native first settlement wins a race with a user or
 the deadline timer. A cancelled in-flight request may still have reached the
 server, so a failed call does not prove a reply was withdrawn.
 
-At an ancestor's next natural model request, a context hook may add a short,
-generic advisory pointing it to `list`. It never copies child text into system
-instructions. The check is best effort: it examines at most the first 50 stored
-deadlines and stops waiting after 250 ms, so it can miss a question; `list`
-examines all pages. No session is woken or interrupted. In particular, a
-foreground parent waiting on a child cannot call these tools until it regains
-control; the 12.5-minute fallback still applies, and the native question remains
-user-resolvable. Only questions observed and tracked by this plugin are listed;
-inaccessible or changed forms are skipped.
+Every natural model request receives one constant, generic conditional reminder
+pointing an ancestor to `list` and telling it not to poll. The reminder is added
+to the system prefix whenever it is absent, whether or not a question is pending,
+so pending-state changes no longer add or remove system text. It never copies
+child text into system instructions or checks pending state itself; use `list`
+to inspect current pending questions. No session is
+woken or interrupted. In particular, a foreground parent waiting on a child
+cannot call these tools until it regains control; the 12.5-minute fallback still
+applies, and the native question remains user-resolvable. Only questions observed
+and tracked by this plugin are listed; inaccessible or changed forms are skipped.
 
 ## Install
 
@@ -151,11 +152,12 @@ detection, deadline scheduling, durable recovery, pending recheck, and disposal;
 it exports `AUTO_ANSWER_DELAY_MS`, `AUTO_ANSWER_TEXT`, and `startAutoQuestion`
 with injected clock/scheduler/storage/event/form/session ports. `src/tools.ts`,
 `src/routes.ts`, and `src/advisory.ts` provide the descendant list/reply tools,
-ancestry and pending checks, and the bounded advisory hook.
+ancestry and pending checks, and the stable context reminder hook.
 `src/local-client.ts`, `src/discovery-worker.ts`, and `src/local-fetch.ts` handle
 authenticated managed-service discovery and guarded local requests.
 
 Tests are deterministic and require no host or live server:
 `tests/runtime.test.ts` uses fakes, `tests/routes.test.ts` covers descendant
-routes, tools, and advisory over fakes, and `tests/local-client.test.ts` runs a
-local fake service with a temporary registration.
+routes and tools over fakes, `tests/advisory.test.ts` covers the context reminder,
+and `tests/local-client.test.ts` runs a local fake service with a temporary
+registration.

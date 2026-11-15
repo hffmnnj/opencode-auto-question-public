@@ -3,7 +3,6 @@ import type { Plugin } from "@opencode/plugin";
 import { createQuestionRoutes, type RouteDeps } from "../src/routes.ts";
 import { storageKey, type StoragePort } from "../src/runtime.ts";
 import { registerQuestionTools } from "../src/tools.ts";
-import { registerQuestionAdvisory } from "../src/advisory.ts";
 
 const deadline = 10_000;
 const fields = [
@@ -56,41 +55,6 @@ function harness() {
 }
 
 describe("descendant question tools", () => {
-  test("natural parent context receives only a generic advisory, not child text", async () => {
-    const h = harness();
-    type ContextEvent = { sessionID: string; system: Array<{ type: string; text: string }> };
-    let hook!: (event: ContextEvent) => Promise<void>;
-    const ctx = { session: { hook: async (name: string, callback: typeof hook) => {
-      expect(name).toBe("context"); hook = callback;
-    } } } as unknown as Plugin.Context;
-    await registerQuestionAdvisory(ctx, createQuestionRoutes(h.deps));
-    const parent: ContextEvent = { sessionID: "parent", system: [] };
-    const sibling: ContextEvent = { sessionID: "sibling", system: [] };
-    await hook(parent);
-    await hook(sibling);
-    await hook(parent);
-    expect(parent.system).toHaveLength(1);
-    expect(parent.system[0]!.text).toContain("tools.agent_question.list({})");
-    expect(parent.system[0]!.text).toContain("untrusted task data");
-    expect(parent.system[0]!.text).not.toContain("Pick one");
-    expect(sibling.system).toEqual([]);
-    h.records.delete(h.key);
-    const settled: ContextEvent = { sessionID: "parent", system: [] };
-    await hook(settled);
-    expect(settled.system).toEqual([]);
-  });
-
-  test("unavailable ancestry cannot block the next model request indefinitely", async () => {
-    const h = harness();
-    type ContextEvent = { sessionID: string; system: Array<{ type: string; text: string }> };
-    let hook!: (event: ContextEvent) => Promise<void>;
-    const ctx = { session: { hook: async (_name: string, callback: typeof hook) => { hook = callback; } } } as unknown as Plugin.Context;
-    await registerQuestionAdvisory(ctx, createQuestionRoutes({ ...h.deps, session: async () => new Promise<never>(() => undefined) }));
-    const event: ContextEvent = { sessionID: "parent", system: [] };
-    await hook(event);
-    expect(event.system).toEqual([]);
-  });
-
   test("Code Mode tool execution uses the invoking session identity", async () => {
     const h = harness();
     const registrations = new Map<string, {

@@ -29,7 +29,7 @@ export default Plugin.define({
       session: async (sessionID, signal) => ctx.session.get({ sessionID }, { signal }),
     });
     await registerQuestionTools(ctx, routes);
-    await registerQuestionAdvisory(ctx, routes);
+    await registerQuestionAdvisory(ctx);
     const runtime = startAutoQuestion({
       directory: ctx.location.directory,
       workspaceID: ctx.location.workspaceID,
